@@ -45,7 +45,7 @@ if not st.session_state.auth_ok:
         if ok:
             if u == APP_USER and p == APP_PASS:
                 st.session_state.auth_ok = True
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Invalid credentials")
     st.stop()
