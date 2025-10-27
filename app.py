@@ -7,6 +7,7 @@ from typing import List, Tuple, Dict
 
 import requests
 import streamlit as st
+from streamlit.runtime.secrets import StreamlitSecretNotFoundError
 
 
 # =========================
@@ -14,18 +15,24 @@ import streamlit as st
 # =========================
 
 def get_secret(key: str, default: str = "") -> str:
-    # Prefer Streamlit secrets; fallback to env var; else default
-    return st.secrets.get(key, os.getenv(key, default))
+    """
+    Try Streamlit secrets.toml first, fall back to environment variables.
+    Works both on Streamlit Cloud and on Render.
+    """
+    try:
+        return st.secrets[key]
+    except (KeyError, StreamlitSecretNotFoundError):
+        return os.getenv(key, default)
 
 ELEVEN_API_KEY = get_secret("ELEVEN_API_KEY")
 APP_USER = get_secret("APP_USER", "team")
 APP_PASS = get_secret("APP_PASS", "strong_password")
 
 if not ELEVEN_API_KEY:
-    st.error("ELEVEN_API_KEY is not set. Add it to .streamlit/secrets.toml (or environment).")
+    st.error("ELEVEN_API_KEY is not set. Add it in Render Environment or Streamlit secrets.")
     st.stop()
 
-# Simple gate (Streamlit doesn't have built-in Basic Auth)
+# Simple in-app login
 if "auth_ok" not in st.session_state:
     st.session_state.auth_ok = False
 
@@ -48,7 +55,6 @@ if not st.session_state.auth_ok:
 # 2) DOMAIN DATA
 # =========================
 
-# --- Celine: FR / DE / IT (3 voices each) ---
 CELINE_VOICES: Dict[str, Dict] = {
     # French
     "fr_corentin": {
@@ -124,7 +130,6 @@ CELINE_SECTIONS = [
     ("Italian", ["it_piero_italia", "it_salvo_caruso", "it_voce_minatore_audiolibro"]),
 ]
 
-# --- Lexi: Spanish only ---
 LEXI_VOICES: Dict[str, Dict] = {
     "es_sam_adam": {
         "display": "Sam Adam",
@@ -166,10 +171,6 @@ def _ext_from_content_type(ct: str) -> str:
     return ".audio"
 
 def convert_one(file_bytes: bytes, filename: str, mime: str, voice_cfg: Dict) -> Tuple[bytes, str]:
-    """
-    Convert a single audio file using ElevenLabs STS.
-    Returns (converted_bytes, content_type).
-    """
     url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_cfg['id']}"
     headers = {"xi-api-key": ELEVEN_API_KEY}
     files = {"audio": (filename, io.BytesIO(file_bytes), mime or "application/octet-stream")}
@@ -183,10 +184,6 @@ def convert_one(file_bytes: bytes, filename: str, mime: str, voice_cfg: Dict) ->
     return r.content, r.headers.get("content-type", "application/octet-stream")
 
 def convert_batch(files: List[Tuple[bytes, str, str]], voice_cfg: Dict) -> bytes:
-    """
-    Convert multiple files and return a ZIP (bytes).
-    `files` is a list of tuples: (file_bytes, filename, mime)
-    """
     buf = io.BytesIO()
     errors = []
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -216,10 +213,6 @@ def sidebar_creator_picker() -> str:
     return choices[label]
 
 def section_voice_picker(creator_key: str) -> Tuple[str, str]:
-    """
-    Returns (section_title, voice_key) chosen by user.
-    Renders tabs (one per section) and a radio of voices in each.
-    """
     meta = CREATORS[creator_key]
     sections = meta["sections"]
     tabs = st.tabs([title for title, _ in sections])
@@ -230,7 +223,6 @@ def section_voice_picker(creator_key: str) -> Tuple[str, str]:
     for i, (title, voice_keys) in enumerate(sections):
         with tabs[i]:
             st.subheader(title)
-            # map display -> key for that section
             display_to_key = {
                 meta["voices"][vk]["display"]: vk
                 for vk in voice_keys
@@ -244,15 +236,12 @@ def section_voice_picker(creator_key: str) -> Tuple[str, str]:
             if st.session_state.get(f"selected_section_{creator_key}", None) is None:
                 st.session_state[f"selected_section_{creator_key}"] = title
                 st.session_state[f"selected_voice_{creator_key}"] = display_to_key[display_label]
-
-            # Let the last interacted tab/voice win
             if st.button(f"Use '{display_label}' for uploads", key=f"use_{creator_key}_{title}"):
                 st.session_state[f"selected_section_{creator_key}"] = title
                 st.session_state[f"selected_voice_{creator_key}"] = display_to_key[display_label]
 
     chosen_section = st.session_state.get(f"selected_section_{creator_key}", sections[0][0])
     chosen_voice = st.session_state.get(f"selected_voice_{creator_key}", sections[0][1][0])
-
     st.info(f"Active section: **{chosen_section}** · Active voice: **{meta['voices'][chosen_voice]['display']}**")
     return chosen_section, chosen_voice
 
@@ -273,13 +262,12 @@ st.markdown("---")
 st.subheader("Upload audio files")
 uploaded = st.file_uploader(
     "Drop or pick 1+ audio files",
-    type=None,  # let users upload any audio; you can restrict (e.g., ["mp3","wav","ogg","flac"])
+    type=None,
     accept_multiple_files=True,
     help="You can upload a single file (returns one audio) or multiple files (returns a ZIP).",
 )
 
 if uploaded:
-    # Show a quick summary table
     st.write("Files selected:")
     for f in uploaded:
         st.write(f"- `{f.name}` ({f.type or 'application/octet-stream'})")
