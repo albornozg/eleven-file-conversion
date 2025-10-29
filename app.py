@@ -255,7 +255,7 @@ CELINE_VOICES: Dict[str, Dict] = {
 
 CELINE_SECTIONS = [
     ("French",  ["fr_corentin", "fr_alexis", "fr_alexandre_boutin"]),
-    ("German",  ["de_ben", "de_juan_schubert", "de_stefan_sport"]),
+    ("German",  ["de_ben", "de_juan_schubert", "de_stefan_sport", "de_Reeloverlay"]),
     ("Italian", ["it_piero_italia", "it_salvo_caruso", "it_voce_minatore_audiolibro"]),
     ("Korean",  ["ko_kkc_shorts", "ko_min_ho", "ko_taemin", "ko_joonpark"]),
     ("Polish",  ["pl_krzysiek", "pl_tomasz_kowalsky", "pl_piotr_pro_lp", "pl_konwersacyjny_kalmil"]),
@@ -445,5 +445,6 @@ if uploaded:
 
 st.markdown("---")
 st.caption("Your API key remains on the server. No uploads are stored; results are returned directly.")
+
 
 
