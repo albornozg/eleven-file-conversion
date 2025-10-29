@@ -78,6 +78,7 @@ CELINE_VOICES: Dict[str, Dict] = {
         "model_id": "eleven_multilingual_sts_v2",
         "lang": "French",
     },
+
     # German
     "de_ben": {
         "display": "Ben",
@@ -100,6 +101,7 @@ CELINE_VOICES: Dict[str, Dict] = {
         "model_id": "eleven_multilingual_sts_v2",
         "lang": "German",
     },
+
     # Italian
     "it_piero_italia": {
         "display": "Piero Italia",
@@ -122,12 +124,136 @@ CELINE_VOICES: Dict[str, Dict] = {
         "model_id": "eleven_multilingual_sts_v2",
         "lang": "Italian",
     },
+
+    # Korean
+    "ko_kkc_shorts": {
+        "display": "kkc shorts",
+        "id": "mgugV8tLa3KQE4mfYTw5",
+        "settings": {"similarity_boost": 0.8, "stability": 0.5, "style": 0.2, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Korean",
+    },
+    "ko_min_ho": {
+        "display": "min ho",
+        "id": "U1cJYS4EdbaHmfR7YzHd",
+        "settings": {"similarity_boost": 0.7, "stability": 0.6, "style": 0.3, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Korean",
+    },
+    "ko_taemin": {
+        "display": "taemin",
+        "id": "Ir7oQcBXWiq4oFGROCfj",
+        "settings": {"similarity_boost": 0.9, "stability": 0.4, "style": 0.2, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Korean",
+    },
+    "ko_joonpark": {
+        "display": "joonpark",
+        "id": "7Nah3cbXKVmGX7gQUuwz",
+        "settings": {"similarity_boost": 0.6, "stability": 0.7, "style": 0.3, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Korean",
+    },
+
+    # Polish
+    "pl_krzysiek": {
+        "display": "krzysiek",
+        "id": "iK3JGPDhpWyubGKeK29u",
+        "settings": {"similarity_boost": 0.7, "stability": 0.6, "style": 0.3, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Polish",
+    },
+    "pl_tomasz_kowalsky": {
+        "display": "Tomasz kowalsky",
+        "id": "JWUOwsYG4XgR9Od3eeon",
+        "settings": {"similarity_boost": 0.8, "stability": 0.5, "style": 0.2, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Polish",
+    },
+    "pl_piotr_pro_lp": {
+        "display": "piotr pro lp",
+        "id": "gFl0NeqphJUaoBLtWrqM",
+        "settings": {"similarity_boost": 0.9, "stability": 0.4, "style": 0.2, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Polish",
+    },
+    "pl_konwersacyjny_kalmil": {
+        "display": "konwersacyjny kAlmil",
+        "id": "mr1ubFaLs5xVrh1EqWtc",
+        "settings": {"similarity_boost": 0.6, "stability": 0.7, "style": 0.3, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Polish",
+    },
+
+    # Tamil
+    "ta_maneesh": {
+        "display": "Maneesh",
+        "id": "pTM0m0egrCpo5i9b1gpo",
+        "settings": {"similarity_boost": 0.7, "stability": 0.6, "style": 0.3, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Tamil",
+    },
+    "ta_bhuvan": {
+        "display": "Bhuvan",
+        "id": "9Ats6C5UrhVXzgyVbnh3",
+        "settings": {"similarity_boost": 0.8, "stability": 0.5, "style": 0.2, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Tamil",
+    },
+    "ta_ramaa": {
+        "display": "ramaa",
+        "id": "8J24wCDJGSNy9xjbiMla",
+        "settings": {"similarity_boost": 0.9, "stability": 0.4, "style": 0.2, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Tamil",
+    },
+    "ta_kathiravan": {
+        "display": "kathiravan",
+        "id": "oJtqFwbHKS0pFD03MNRd",
+        "settings": {"similarity_boost": 0.6, "stability": 0.7, "style": 0.3, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Tamil",
+    },
+
+    # Thai
+    "th_michiel": {
+        "display": "thai - michiel",
+        "id": "D0zfVvTrOu5S1yl4OIwg",
+        "settings": {"similarity_boost": 0.8, "stability": 0.5, "style": 0.2, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Thai",
+    },
+    "th_young_male1": {
+        "display": "thai - young male 1",
+        "id": "VEx62MzkotIbEtPQV0Uc",
+        "settings": {"similarity_boost": 0.7, "stability": 0.6, "style": 0.3, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Thai",
+    },
+    "th_young_male2": {
+        "display": "thai - young male 2",
+        "id": "VEx62MzkotIbEtPQV0Uc",
+        "settings": {"similarity_boost": 0.7, "stability": 0.6, "style": 0.3, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Thai",
+    },
+    "th_young_male3": {
+        "display": "thai - young male 3",
+        "id": "VEx62MzkotIbEtPQV0Uc",
+        "settings": {"similarity_boost": 0.7, "stability": 0.6, "style": 0.3, "use_speaker_boost": True},
+        "model_id": "eleven_multilingual_sts_v2",
+        "lang": "Thai",
+    },
 }
 
 CELINE_SECTIONS = [
     ("French",  ["fr_corentin", "fr_alexis", "fr_alexandre_boutin"]),
     ("German",  ["de_ben", "de_juan_schubert", "de_stefan_sport"]),
     ("Italian", ["it_piero_italia", "it_salvo_caruso", "it_voce_minatore_audiolibro"]),
+    ("Korean",  ["ko_kkc_shorts", "ko_min_ho", "ko_taemin", "ko_joonpark"]),
+    ("Polish",  ["pl_krzysiek", "pl_tomasz_kowalsky", "pl_piotr_pro_lp", "pl_konwersacyjny_kalmil"]),
+    ("Tamil",   ["ta_maneesh", "ta_bhuvan", "ta_ramaa", "ta_kathiravan"]),
+    ("Thai",    ["th_michiel", "th_young_male1", "th_young_male2", "th_young_male3"]),
 ]
 
 LEXI_VOICES: Dict[str, Dict] = {
@@ -312,3 +438,4 @@ if uploaded:
 
 st.markdown("---")
 st.caption("Your API key remains on the server. No uploads are stored; results are returned directly.")
+
