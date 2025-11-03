@@ -336,17 +336,19 @@ def _ext_from_ct_or_fallback(ct: str, desired: str) -> str:
 
 def convert_one(file_bytes: bytes, filename: str, mime: str, voice_cfg: Dict, output_format: str) -> Tuple[bytes, str]:
     """
-    Convert a single file via ElevenLabs STS, requesting a specific output_format
-    (e.g., 'mp3_44100_128' or 'wav').
-    Returns (audio_bytes, content_type).
+    Convert a single file via ElevenLabs STS, requesting a specific output_format.
+    IMPORTANT: output_format must be sent as a QUERY PARAM.
     """
-    url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_cfg['id']}"
+    # Build URL with output_format as query param (this is what the API expects)
+    base_url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_cfg['id']}"
+    url = f"{base_url}?output_format={output_format}"
+
     headers = {"xi-api-key": ELEVEN_API_KEY}
     files = {"audio": (filename, io.BytesIO(file_bytes), mime or "application/octet-stream")}
     data = {
         "voice_settings": json.dumps(voice_cfg["settings"]),
         "model_id": voice_cfg.get("model_id", "eleven_multilingual_sts_v2"),
-        "output_format": output_format,
+        # NOTE: do NOT put output_format here; it'll be ignored if sent in form-data
     }
     r = requests.post(url, headers=headers, files=files, data=data, timeout=300)
     if r.status_code != 200:
@@ -442,13 +444,16 @@ uploaded = st.file_uploader(
 st.subheader("Output format")
 fmt = st.radio(
     "Choose the format for the converted audio",
-    options=[".mp3 (44.1 kHz / 128 kbps)", ".wav (44.1 kHz)"],
+    options=[".mp3 (44.1 kHz / 128 kbps)", ".wav (44.1 kHz PCM)"],
     horizontal=True,
     key="out_fmt",
 )
+
+# Map UI label -> ElevenLabs output_format string and the preferred file extension
+# mp3 choice uses mp3_44100_128 (default); wav choice uses PCM S16LE at 44.1kHz
 OUTPUT_FORMAT_MAP = {
     ".mp3 (44.1 kHz / 128 kbps)": ("mp3_44100_128", ".mp3"),
-    ".wav (44.1 kHz)": ("wav", ".wav"),
+    ".wav (44.1 kHz PCM)": ("pcm_44100", ".wav"),
 }
 chosen_output_format, chosen_ext = OUTPUT_FORMAT_MAP[fmt]
 
@@ -461,40 +466,4 @@ if uploaded:
         try:
             if len(uploaded) == 1:
                 f = uploaded[0]
-                with st.spinner("Converting..."):
-                    out_bytes, ct = convert_one(f.read(), f.name, f.type, voice_cfg, chosen_output_format)
-                # Prefer server-declared extension when obvious; otherwise use selected ext
-                ext = _ext_from_ct_or_fallback(ct, chosen_ext)
-                out_name = os.path.splitext(f.name)[0] + "_converted" + ext
-                st.success("Done.")
-                st.download_button(
-                    label=f"Download {out_name}",
-                    data=out_bytes,
-                    file_name=out_name,
-                    mime=ct or "application/octet-stream",
-                    use_container_width=True,
-                )
-            else:
-                files = []
-                total = len(uploaded)
-                prog = st.progress(0, text="Processing batch...")
-                for i, f in enumerate(uploaded, start=1):
-                    files.append((f.read(), f.name, f.type))
-                    prog.progress(i / total, text=f"Processing {i}/{total}")
-                with st.spinner("Building ZIP..."):
-                    zip_bytes = convert_batch(files, voice_cfg, chosen_output_format, chosen_ext)
-                stamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-                zip_name = f"{creator_key}_{voice_key}_converted_{stamp}.zip"
-                st.success("Batch complete.")
-                st.download_button(
-                    label=f"Download {zip_name}",
-                    data=zip_bytes,
-                    file_name=zip_name,
-                    mime="application/zip",
-                    use_container_width=True,
-                )
-        except Exception as e:
-            st.error(f"Conversion error: {e}")
-
-st.markdown("---")
-st.caption("Your API key remains on the server. No uploads are stored; results are returned directly.")
+                with st.spi
