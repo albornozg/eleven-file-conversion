@@ -422,7 +422,7 @@ def section_voice_picker(creator_key: str) -> Tuple[str, str]:
 
 
 # =========================
-# 5) MAIN UI
+# 5) MAIN UI  (drop-in replacement)
 # =========================
 
 st.title("Voice Converter — Streamlit")
@@ -436,16 +436,20 @@ voice_cfg = creator["voices"][voice_key]
 st.markdown("---")
 st.subheader("Upload audio files")
 
+# --- Rolling key to allow clearing the uploader safely ---
+if "uploader_key" not in st.session_state:
+    st.session_state["uploader_key"] = 0
+
 def clear_all_uploads():
-    # Clearing the file_uploader requires resetting its widget state key
-    st.session_state["uploader"] = None
+    # Force the file_uploader to reset by changing its key
+    st.session_state["uploader_key"] += 1
     st.rerun()
 
 uploaded = st.file_uploader(
     "Drop or pick 1+ audio files",
     type=None,
     accept_multiple_files=True,
-    key="uploader",  # <-- IMPORTANT: give the uploader a key
+    key=f"uploader_{st.session_state['uploader_key']}",  # dynamic key resets widget cleanly
     help="You can upload a single file (returns one audio) or multiple files (returns a ZIP).",
 )
 
@@ -458,6 +462,8 @@ fmt = st.radio(
     key="out_fmt",
 )
 
+# Map UI label -> ElevenLabs output_format string and preferred file extension
+# IMPORTANT: WAV maps to 'pcm_44100' (valid token)
 OUTPUT_FORMAT_MAP = {
     ".mp3 (44.1 kHz / 128 kbps)": ("mp3_44100_128", ".mp3"),
     ".wav (44.1 kHz PCM)": ("pcm_44100", ".wav"),
@@ -492,6 +498,7 @@ if uploaded:
 
                 _debug(f"Requested output_format={chosen_output_format}, response Content-Type={ct}, resolved_ext={ext}")
 
+                # Warn if user asked for WAV but API still returned MP3
                 if chosen_ext == ".wav" and "mpeg" in (ct or "").lower():
                     st.warning("You selected WAV (PCM), but the API returned MP3. "
                                "This can happen if your ElevenLabs plan does not include PCM/WAV output.")
@@ -531,3 +538,5 @@ if uploaded:
 
 st.markdown("---")
 st.caption("Your API key remains on the server. No uploads are stored; results are returned directly.")
+
+
