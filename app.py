@@ -334,28 +334,44 @@ def _ext_from_ct_or_fallback(ct: str, desired: str) -> str:
         return ".wav"
     return desired
 
+def _build_url(voice_id: str, output_format: str) -> str:
+    base = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_id}"
+    return f"{base}?output_format={output_format}"
+
 def convert_one(file_bytes: bytes, filename: str, mime: str, voice_cfg: Dict, output_format: str) -> Tuple[bytes, str]:
     """
-    Convert a single file via ElevenLabs STS, requesting a specific output_format.
-    IMPORTANT: output_format must be sent as a QUERY PARAM.
+    Convert a single file via ElevenLabs STS. Sends output_format as a QUERY PARAM.
+    If WAV was requested but returns MP3, retry once with an alternate WAV token.
     """
-    # Build URL with output_format as query param (this is what the API expects)
-    base_url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_cfg['id']}"
-    url = f"{base_url}?output_format={output_format}"
-
     headers = {"xi-api-key": ELEVEN_API_KEY}
     files = {"audio": (filename, io.BytesIO(file_bytes), mime or "application/octet-stream")}
     data = {
         "voice_settings": json.dumps(voice_cfg["settings"]),
         "model_id": voice_cfg.get("model_id", "eleven_multilingual_sts_v2"),
-        # NOTE: do NOT put output_format here; it'll be ignored if sent in form-data
     }
-    r = requests.post(url, headers=headers, files=files, data=data, timeout=300)
-    if r.status_code != 200:
-        raise RuntimeError(f"{r.status_code}: {r.text}")
-    return r.content, r.headers.get("content-type", "application/octet-stream")
 
-def convert_batch(files: List[Tuple[bytes, str, str]], voice_cfg: Dict, output_format: str, default_ext: str) -> bytes:
+    def _call(fmt: str):
+        url = _build_url(voice_cfg["id"], fmt)
+        r = requests.post(url, headers=headers, files=files, data=data, timeout=300)
+        if r.status_code != 200:
+            raise RuntimeError(f"{r.status_code}: {r.text}")
+        return r.content, r.headers.get("content-type", "application/octet-stream")
+
+    # First attempt
+    out_bytes, ct = _call(output_format)
+
+    # If user wanted WAV but we got MP3, try alternate token once
+    want_wav = output_format in ("wav", "pcm_44100")
+    got_mp3 = "mpeg" in (ct or "").lower()
+    if want_wav and got_mp3:
+        alt = "pcm_44100" if output_format == "wav" else "wav"
+        out_bytes2, ct2 = _call(alt)
+        if "wav" in (ct2 or "").lower() or "x-wav" in (ct2 or "").lower():
+            return out_bytes2, ct2
+        # otherwise keep the original result
+    return out_bytes, ct
+
+def convert_batch(files: List[Tuple[bytes, str, str]], voice_cfg: Dict, output_format: str, default_ext: str, debug: bool=False) -> bytes:
     """
     Convert multiple files and package them into a ZIP.
     Uses server Content-Type to guess extension; falls back to default_ext.
@@ -369,6 +385,9 @@ def convert_batch(files: List[Tuple[bytes, str, str]], voice_cfg: Dict, output_f
                 out_bytes, ct = convert_one(file_bytes, filename, mime, voice_cfg, output_format)
                 ext = _ext_from_ct_or_fallback(ct, default_ext)
                 zf.writestr(f"{base}_converted{ext}", out_bytes)
+                if debug:
+                    # Store a tiny per-file log for debugging
+                    zf.writestr(f"_debug_{base}.txt", f"requested={output_format}\ncontent_type={ct}\nresolved_ext={ext}\n")
             except Exception as e:
                 errors.append(f"{filename}: {e}")
         if errors:
@@ -449,13 +468,20 @@ fmt = st.radio(
     key="out_fmt",
 )
 
-# Map UI label -> ElevenLabs output_format string and the preferred file extension
-# mp3 choice uses mp3_44100_128 (default); wav choice uses PCM S16LE at 44.1kHz
+# Map UI label -> ElevenLabs output_format string and preferred file extension
+# WAV choice will auto-retry with the alternate token if needed (wav <-> pcm_44100)
 OUTPUT_FORMAT_MAP = {
     ".mp3 (44.1 kHz / 128 kbps)": ("mp3_44100_128", ".mp3"),
-    ".wav (44.1 kHz PCM)": ("pcm_44100", ".wav"),
+    ".wav (44.1 kHz PCM)": ("wav", ".wav"),  # fallback to 'pcm_44100' inside convert_one if needed
 }
 chosen_output_format, chosen_ext = OUTPUT_FORMAT_MAP[fmt]
+
+# --- Debug panel ---
+debug_mode = st.checkbox("Show debug info", value=False, help="Print request/response details")
+
+def _debug(msg: str):
+    if debug_mode:
+        st.write(msg)
 
 if uploaded:
     st.write("Files selected:")
@@ -466,4 +492,54 @@ if uploaded:
         try:
             if len(uploaded) == 1:
                 f = uploaded[0]
-                with st.spi
+                with st.spinner("Converting..."):
+                    out_bytes, ct = convert_one(f.read(), f.name, f.type, voice_cfg, chosen_output_format)
+
+                # Prefer server-declared extension when obvious; otherwise use selected ext
+                ext = _ext_from_ct_or_fallback(ct, chosen_ext)
+                out_name = os.path.splitext(f.name)[0] + "_converted" + ext
+
+                # Debug info
+                _debug(f"Requested output_format={chosen_output_format}, response Content-Type={ct}, resolved_ext={ext}")
+
+                # Warn if user asked for WAV but API returned MP3
+                ct_lower = (ct or "").lower()
+                if chosen_ext == ".wav" and "mpeg" in ct_lower:
+                    st.warning("You selected WAV, but the API returned MP3. "
+                               "This can happen if your ElevenLabs plan does not include PCM/WAV output.")
+
+                st.success("Done.")
+                st.download_button(
+                    label=f"Download {out_name}",
+                    data=out_bytes,
+                    file_name=out_name,
+                    mime=ct or "application/octet-stream",
+                    use_container_width=True,
+                )
+
+            else:
+                files = []
+                total = len(uploaded)
+                prog = st.progress(0, text="Processing batch...")
+                for i, f in enumerate(uploaded, start=1):
+                    files.append((f.read(), f.name, f.type))
+                    prog.progress(i / total, text=f"Processing {i}/{total}")
+
+                with st.spinner("Building ZIP..."):
+                    zip_bytes = convert_batch(files, voice_cfg, chosen_output_format, chosen_ext, debug=debug_mode)
+
+                stamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                zip_name = f"{creator_key}_{voice_key}_converted_{stamp}.zip"
+                st.success("Batch complete.")
+                st.download_button(
+                    label=f"Download {zip_name}",
+                    data=zip_bytes,
+                    file_name=zip_name,
+                    mime="application/zip",
+                    use_container_width=True,
+                )
+        except Exception as e:
+            st.error(f"Conversion error: {e}")
+
+st.markdown("---")
+st.caption("Your API key remains on the server. No uploads are stored; results are returned directly.")
