@@ -435,10 +435,17 @@ voice_cfg = creator["voices"][voice_key]
 
 st.markdown("---")
 st.subheader("Upload audio files")
+
+def clear_all_uploads():
+    # Clearing the file_uploader requires resetting its widget state key
+    st.session_state["uploader"] = None
+    st.rerun()
+
 uploaded = st.file_uploader(
     "Drop or pick 1+ audio files",
     type=None,
     accept_multiple_files=True,
+    key="uploader",  # <-- IMPORTANT: give the uploader a key
     help="You can upload a single file (returns one audio) or multiple files (returns a ZIP).",
 )
 
@@ -451,8 +458,6 @@ fmt = st.radio(
     key="out_fmt",
 )
 
-# Map UI label -> ElevenLabs output_format string and preferred file extension
-# IMPORTANT: WAV maps to 'pcm_44100' (valid token)
 OUTPUT_FORMAT_MAP = {
     ".mp3 (44.1 kHz / 128 kbps)": ("mp3_44100_128", ".mp3"),
     ".wav (44.1 kHz PCM)": ("pcm_44100", ".wav"),
@@ -471,7 +476,11 @@ if uploaded:
     for f in uploaded:
         st.write(f"- `{f.name}` ({f.type or 'application/octet-stream'})")
 
-    if st.button("Convert"):
+    c1, c2 = st.columns([1, 1])
+    convert_clicked = c1.button("Convert", use_container_width=True)
+    c2.button("Clear all", type="secondary", on_click=clear_all_uploads, use_container_width=True)
+
+    if convert_clicked:
         try:
             if len(uploaded) == 1:
                 f = uploaded[0]
@@ -483,9 +492,7 @@ if uploaded:
 
                 _debug(f"Requested output_format={chosen_output_format}, response Content-Type={ct}, resolved_ext={ext}")
 
-                # Warn if user asked for WAV but API still returned MP3
-                ct_lower = (ct or "").lower()
-                if chosen_ext == ".wav" and "mpeg" in ct_lower:
+                if chosen_ext == ".wav" and "mpeg" in (ct or "").lower():
                     st.warning("You selected WAV (PCM), but the API returned MP3. "
                                "This can happen if your ElevenLabs plan does not include PCM/WAV output.")
 
