@@ -309,36 +309,63 @@ CREATORS = {
 # =========================
 
 def _ext_from_content_type(ct: str) -> str:
-    if not ct: return ".audio"
+    if not ct:
+        return ".audio"
     s = ct.lower()
-    if "mpeg" in s: return ".mp3"
-    if "wav" in s or "x-wav" in s: return ".wav"
-    if "ogg" in s: return ".ogg"
-    if "flac" in s: return ".flac"
+    if "mpeg" in s:
+        return ".mp3"
+    if "wav" in s or "x-wav" in s:
+        return ".wav"
+    if "ogg" in s:
+        return ".ogg"
+    if "flac" in s:
+        return ".flac"
     return ".audio"
 
-def convert_one(file_bytes: bytes, filename: str, mime: str, voice_cfg: Dict) -> Tuple[bytes, str]:
+def _ext_from_ct_or_fallback(ct: str, desired: str) -> str:
+    """
+    Prefer the server-declared content-type when it's clearly mp3 or wav.
+    Otherwise, use the user-selected desired extension.
+    """
+    s = (ct or "").lower()
+    if "mpeg" in s:
+        return ".mp3"
+    if "wav" in s or "x-wav" in s:
+        return ".wav"
+    return desired
+
+def convert_one(file_bytes: bytes, filename: str, mime: str, voice_cfg: Dict, output_format: str) -> Tuple[bytes, str]:
+    """
+    Convert a single file via ElevenLabs STS, requesting a specific output_format
+    (e.g., 'mp3_44100_128' or 'wav').
+    Returns (audio_bytes, content_type).
+    """
     url = f"https://api.elevenlabs.io/v1/speech-to-speech/{voice_cfg['id']}"
     headers = {"xi-api-key": ELEVEN_API_KEY}
     files = {"audio": (filename, io.BytesIO(file_bytes), mime or "application/octet-stream")}
     data = {
         "voice_settings": json.dumps(voice_cfg["settings"]),
         "model_id": voice_cfg.get("model_id", "eleven_multilingual_sts_v2"),
+        "output_format": output_format,
     }
     r = requests.post(url, headers=headers, files=files, data=data, timeout=300)
     if r.status_code != 200:
         raise RuntimeError(f"{r.status_code}: {r.text}")
     return r.content, r.headers.get("content-type", "application/octet-stream")
 
-def convert_batch(files: List[Tuple[bytes, str, str]], voice_cfg: Dict) -> bytes:
+def convert_batch(files: List[Tuple[bytes, str, str]], voice_cfg: Dict, output_format: str, default_ext: str) -> bytes:
+    """
+    Convert multiple files and package them into a ZIP.
+    Uses server Content-Type to guess extension; falls back to default_ext.
+    """
     buf = io.BytesIO()
     errors = []
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for file_bytes, filename, mime in files:
             base = os.path.splitext(filename)[0] or "file"
             try:
-                out_bytes, ct = convert_one(file_bytes, filename, mime, voice_cfg)
-                ext = _ext_from_content_type(ct)
+                out_bytes, ct = convert_one(file_bytes, filename, mime, voice_cfg, output_format)
+                ext = _ext_from_ct_or_fallback(ct, default_ext)
                 zf.writestr(f"{base}_converted{ext}", out_bytes)
             except Exception as e:
                 errors.append(f"{filename}: {e}")
@@ -363,9 +390,6 @@ def section_voice_picker(creator_key: str) -> Tuple[str, str]:
     meta = CREATORS[creator_key]
     sections = meta["sections"]
     tabs = st.tabs([title for title, _ in sections])
-
-    chosen_section = None
-    chosen_voice = None
 
     for i, (title, voice_keys) in enumerate(sections):
         with tabs[i]:
@@ -414,6 +438,20 @@ uploaded = st.file_uploader(
     help="You can upload a single file (returns one audio) or multiple files (returns a ZIP).",
 )
 
+# --- Output format selector ---
+st.subheader("Output format")
+fmt = st.radio(
+    "Choose the format for the converted audio",
+    options=[".mp3 (44.1 kHz / 128 kbps)", ".wav (44.1 kHz)"],
+    horizontal=True,
+    key="out_fmt",
+)
+OUTPUT_FORMAT_MAP = {
+    ".mp3 (44.1 kHz / 128 kbps)": ("mp3_44100_128", ".mp3"),
+    ".wav (44.1 kHz)": ("wav", ".wav"),
+}
+chosen_output_format, chosen_ext = OUTPUT_FORMAT_MAP[fmt]
+
 if uploaded:
     st.write("Files selected:")
     for f in uploaded:
@@ -424,8 +462,9 @@ if uploaded:
             if len(uploaded) == 1:
                 f = uploaded[0]
                 with st.spinner("Converting..."):
-                    out_bytes, ct = convert_one(f.read(), f.name, f.type, voice_cfg)
-                ext = _ext_from_content_type(ct)
+                    out_bytes, ct = convert_one(f.read(), f.name, f.type, voice_cfg, chosen_output_format)
+                # Prefer server-declared extension when obvious; otherwise use selected ext
+                ext = _ext_from_ct_or_fallback(ct, chosen_ext)
                 out_name = os.path.splitext(f.name)[0] + "_converted" + ext
                 st.success("Done.")
                 st.download_button(
@@ -443,7 +482,7 @@ if uploaded:
                     files.append((f.read(), f.name, f.type))
                     prog.progress(i / total, text=f"Processing {i}/{total}")
                 with st.spinner("Building ZIP..."):
-                    zip_bytes = convert_batch(files, voice_cfg)
+                    zip_bytes = convert_batch(files, voice_cfg, chosen_output_format, chosen_ext)
                 stamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
                 zip_name = f"{creator_key}_{voice_key}_converted_{stamp}.zip"
                 st.success("Batch complete.")
@@ -459,7 +498,3 @@ if uploaded:
 
 st.markdown("---")
 st.caption("Your API key remains on the server. No uploads are stored; results are returned directly.")
-
-
-
-
