@@ -422,10 +422,10 @@ def section_voice_picker(creator_key: str) -> Tuple[str, str]:
 
 
 # =========================
-# 5) MAIN UI  (drop-in replacement)
+# 5) MAIN UI  (drop-in replacement with filename toggle)
 # =========================
 
-st.title("Voice Converter — Streamlit")
+st.title("Voice Converter")
 creator_key = sidebar_creator_picker()
 creator = CREATORS[creator_key]
 
@@ -443,6 +443,7 @@ if "uploader_key" not in st.session_state:
 def clear_all_uploads():
     # Force the file_uploader to reset by changing its key
     st.session_state["uploader_key"] += 1
+    # rerun() inside callback is optional — Streamlit reruns automatically
     st.rerun()
 
 uploaded = st.file_uploader(
@@ -463,12 +464,18 @@ fmt = st.radio(
 )
 
 # Map UI label -> ElevenLabs output_format string and preferred file extension
-# IMPORTANT: WAV maps to 'pcm_44100' (valid token)
 OUTPUT_FORMAT_MAP = {
     ".mp3 (44.1 kHz / 128 kbps)": ("mp3_44100_128", ".mp3"),
     ".wav (44.1 kHz PCM)": ("pcm_44100", ".wav"),
 }
 chosen_output_format, chosen_ext = OUTPUT_FORMAT_MAP[fmt]
+
+# --- Checkbox: keep original filename or add "_converted" ---
+keep_original_name = st.checkbox(
+    "Keep original filename (no '_converted' suffix)",
+    value=False,
+    help="If checked, the converted file will keep the same name as the original file.",
+)
 
 # --- Debug panel ---
 debug_mode = st.checkbox("Show debug info", value=False, help="Print request/response details")
@@ -494,7 +501,8 @@ if uploaded:
                     out_bytes, ct = convert_one(f.read(), f.name, f.type, voice_cfg, chosen_output_format)
 
                 ext = _ext_from_ct_or_fallback(ct, chosen_ext)
-                out_name = os.path.splitext(f.name)[0] + "_converted" + ext
+                base_name = os.path.splitext(f.name)[0]
+                out_name = f"{base_name}{ext}" if keep_original_name else f"{base_name}_converted{ext}"
 
                 _debug(f"Requested output_format={chosen_output_format}, response Content-Type={ct}, resolved_ext={ext}")
 
@@ -524,7 +532,9 @@ if uploaded:
                     zip_bytes = convert_batch(files, voice_cfg, chosen_output_format, chosen_ext, debug=debug_mode)
 
                 stamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-                zip_name = f"{creator_key}_{voice_key}_converted_{stamp}.zip"
+                suffix = "" if keep_original_name else "_converted"
+                zip_name = f"{creator_key}_{voice_key}{suffix}_{stamp}.zip"
+
                 st.success("Batch complete.")
                 st.download_button(
                     label=f"Download {zip_name}",
@@ -538,5 +548,3 @@ if uploaded:
 
 st.markdown("---")
 st.caption("Your API key remains on the server. No uploads are stored; results are returned directly.")
-
-
