@@ -472,7 +472,7 @@ chosen_output_format, chosen_ext = OUTPUT_FORMAT_MAP[fmt]
 
 # --- Checkbox: keep original filename or add "_converted" ---
 keep_original_name = st.checkbox(
-    "Keep original filename (no '_converted' suffix)",
+    "Keep original filename",
     value=False,
     help="If checked, the converted file will keep the same name as the original file.",
 )
@@ -547,4 +547,5 @@ if uploaded:
             st.error(f"Conversion error: {e}")
 
 st.markdown("---")
-st.caption("Your API key remains on the server. No uploads are stored; results are returned directly.")
+st.caption("NOTE: No uploads are stored; results are returned directly.")
+
