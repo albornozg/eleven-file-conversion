@@ -179,7 +179,7 @@ CELINE_VOICES: Dict[str, Dict] = {
     # Polish
     "pl_krzysiek": {
         "display": "Michiel",
-        "id": "iK3JGPDhpWyubGKeK29u",
+        "id": "ZUdFQHf8lAj4o7hiHvbE",
         "settings": {"similarity_boost": 0.0, "stability": 0.5, "style": 0.0, "use_speaker_boost": False},
         "model_id": "eleven_multilingual_sts_v2",
         "lang": "Polish",
@@ -548,4 +548,5 @@ if uploaded:
 
 st.markdown("---")
 st.caption("NOTE: No uploads are stored; results are returned directly.")
+
 
