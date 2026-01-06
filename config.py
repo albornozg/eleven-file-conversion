@@ -36,7 +36,7 @@ def authenticate():
                     st.error("Invalid credentials")
         st.stop()
 
-# Fetch subscription tier (cached in session state)
+# Fetch subscription tier
 def get_subscription_tier():
     url = "https://api.elevenlabs.io/v1/user/subscription"
     headers = {"xi-api-key": ELEVEN_API_KEY}
@@ -50,5 +50,10 @@ def get_subscription_tier():
     except Exception:
         return "unknown"
 
-if "subscription_tier" not in st.session_state:
-    st.session_state["subscription_tier"] = get_subscription_tier()
+def get_tier():
+    if "subscription_tier" not in st.session_state:
+        st.session_state["subscription_tier"] = get_subscription_tier()
+    return st.session_state["subscription_tier"]
+
+def supports_pcm_func(tier):
+    return tier in ["pro", "scale", "business", "enterprise"]
