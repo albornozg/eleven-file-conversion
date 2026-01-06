@@ -2,7 +2,7 @@ import datetime
 import resource
 import streamlit as st
 
-from config import ELEVEN_API_KEY, authenticate, tier, supports_pcm
+from config import ELEVEN_API_KEY, authenticate, get_tier, supports_pcm_func
 from data import CREATORS
 from client import convert_one, convert_batch, _ext_from_ct_or_fallback
 from utils import sidebar_creator_picker, section_voice_picker, clear_all_uploads
@@ -13,6 +13,9 @@ if not ELEVEN_API_KEY:
     st.stop()
 
 authenticate()
+
+tier = get_tier()
+supports_pcm = supports_pcm_func(tier)
 
 st.title("Voice Converter")
 creator_key = sidebar_creator_picker(CREATORS)
