@@ -4,11 +4,15 @@ import json
 import zipfile
 import datetime
 import wave  # Added for wrapping raw PCM in WAV
+import resource  # Added for memory monitoring
 from typing import List, Tuple, Dict
 
 import requests
 import streamlit as st
 from streamlit.runtime.secrets import StreamlitSecretNotFoundError
+
+# Define max batch size (adjust based on testing; start conservative)
+MAX_BATCH_BYTES = 200 * 1024 * 1024  # 200 MB safe limit for inputs
 
 
 # =========================
@@ -541,66 +545,82 @@ def _debug(msg: str):
         st.write(msg)
 
 if uploaded:
-    st.write("Files selected:")
-    for f in uploaded:
-        st.write(f"- `{f.name}` ({f.type or 'application/octet-stream'})")
+    # Calculate total batch size before processing
+    total_size = sum(f.size for f in uploaded)  # in bytes
+    if total_size > MAX_BATCH_BYTES:
+        st.error(f"Batch too large ({total_size / 1024 / 1024:.2f} MB). Max allowed: {MAX_BATCH_BYTES / 1024 / 1024} MB to avoid memory crashes. Reduce files or try smaller ones.")
+    else:
+        st.write("Files selected:")
+        for f in uploaded:
+            st.write(f"- `{f.name}` ({f.type or 'application/octet-stream'}) ({f.size / 1024 / 1024:.2f} MB)")
 
-    c1, c2 = st.columns([1, 1])
-    convert_clicked = c1.button("Convert", use_container_width=True)
-    c2.button("Clear all", type="secondary", on_click=clear_all_uploads, use_container_width=True)
+        c1, c2 = st.columns([1, 1])
+        convert_clicked = c1.button("Convert", use_container_width=True)
+        c2.button("Clear all", type="secondary", on_click=clear_all_uploads, use_container_width=True)
 
-    if convert_clicked:
-        try:
-            if len(uploaded) == 1:
-                f = uploaded[0]
-                with st.spinner("Converting..."):
-                    out_bytes, ct = convert_one(f.read(), f.name, f.type, voice_cfg, chosen_output_format)
+        if convert_clicked:
+            try:
+                # Log starting memory (for debugging/tuning)
+                if debug_mode:
+                    start_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
+                    _debug(f"Starting memory usage: {start_mem:.2f} MB")
 
-                ext = _ext_from_ct_or_fallback(ct, chosen_ext)
-                base_name = os.path.splitext(f.name)[0]
-                out_name = f"{base_name}{ext}" if keep_original_name else f"{base_name}_converted{ext}"
+                if len(uploaded) == 1:
+                    f = uploaded[0]
+                    with st.spinner("Converting..."):
+                        out_bytes, ct = convert_one(f.read(), f.name, f.type, voice_cfg, chosen_output_format)
 
-                _debug(f"Requested output_format={chosen_output_format}, response Content-Type={ct}, resolved_ext={ext}")
+                    ext = _ext_from_ct_or_fallback(ct, chosen_ext)
+                    base_name = os.path.splitext(f.name)[0]
+                    out_name = f"{base_name}{ext}" if keep_original_name else f"{base_name}_converted{ext}"
 
-                # Warn if user asked for WAV but API still returned MP3
-                if chosen_ext == ".wav" and "mpeg" in (ct or "").lower():
-                    st.warning("You selected WAV (PCM), but the API returned MP3. "
-                               "This can happen if your ElevenLabs plan does not include PCM/WAV output. Please upgrade your subscription.")
+                    _debug(f"Requested output_format={chosen_output_format}, response Content-Type={ct}, resolved_ext={ext}")
 
-                st.success("Done.")
-                st.download_button(
-                    label=f"Download {out_name}",
-                    data=out_bytes,
-                    file_name=out_name,
-                    mime=ct or "application/octet-stream",
-                    use_container_width=True,
-                )
+                    # Warn if user asked for WAV but API still returned MP3
+                    if chosen_ext == ".wav" and "mpeg" in (ct or "").lower():
+                        st.warning("You selected WAV (PCM), but the API returned MP3. "
+                                   "This can happen if your ElevenLabs plan does not include PCM/WAV output. Please upgrade your subscription.")
 
-            else:
-                files = []
-                total = len(uploaded)
-                prog = st.progress(0, text="Processing batch...")
-                for i, f in enumerate(uploaded, start=1):
-                    files.append((f.read(), f.name, f.type))
-                    prog.progress(i / total, text=f"Processing {i}/{total}")
+                    st.success("Done.")
+                    st.download_button(
+                        label=f"Download {out_name}",
+                        data=out_bytes,
+                        file_name=out_name,
+                        mime=ct or "application/octet-stream",
+                        use_container_width=True,
+                    )
 
-                with st.spinner("Building ZIP..."):
-                    zip_bytes = convert_batch(files, voice_cfg, chosen_output_format, chosen_ext, keep_original_name, debug=debug_mode)
+                else:
+                    files = []
+                    total = len(uploaded)
+                    prog = st.progress(0, text="Processing batch...")
+                    for i, f in enumerate(uploaded, start=1):
+                        files.append((f.read(), f.name, f.type))
+                        prog.progress(i / total, text=f"Processing {i}/{total}")
 
-                stamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-                suffix = "" if keep_original_name else "_converted"
-                zip_name = f"{creator_key}_{voice_key}{suffix}_{stamp}.zip"
+                    with st.spinner("Building ZIP..."):
+                        zip_bytes = convert_batch(files, voice_cfg, chosen_output_format, chosen_ext, keep_original_name, debug=debug_mode)
 
-                st.success("Batch complete.")
-                st.download_button(
-                    label=f"Download {zip_name}",
-                    data=zip_bytes,
-                    file_name=zip_name,
-                    mime="application/zip",
-                    use_container_width=True,
-                )
-        except Exception as e:
-            st.error(f"Conversion error: {e}")
+                    stamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+                    suffix = "" if keep_original_name else "_converted"
+                    zip_name = f"{creator_key}_{voice_key}{suffix}_{stamp}.zip"
+
+                    st.success("Batch complete.")
+                    st.download_button(
+                        label=f"Download {zip_name}",
+                        data=zip_bytes,
+                        file_name=zip_name,
+                        mime="application/zip",
+                        use_container_width=True,
+                    )
+
+                # Log ending memory (for debugging/tuning)
+                if debug_mode:
+                    end_mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 / 1024
+                    _debug(f"Ending memory usage: {end_mem:.2f} MB")
+
+            except Exception as e:
+                st.error(f"Conversion error: {e}")
 
 st.markdown("---")
 st.caption("NOTE: No uploads are stored; results are returned directly.")
