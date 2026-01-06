@@ -355,20 +355,21 @@ def convert_one(file_bytes: bytes, filename: str, mime: str, voice_cfg: Dict, ou
         raise RuntimeError(f"{r.status_code}: {r.text}")
     return r.content, r.headers.get("content-type", "application/octet-stream")
 
-def convert_batch(files: List[Tuple[bytes, str, str]], voice_cfg: Dict, output_format: str, default_ext: str, debug: bool=False) -> bytes:
+def convert_batch(files: List[Tuple[bytes, str, str]], voice_cfg: Dict, output_format: str, default_ext: str, keep_original_name: bool, debug: bool=False) -> bytes:
     """
     Convert multiple files and package them into a ZIP.
     Uses server Content-Type to guess extension; falls back to default_ext.
     """
     buf = io.BytesIO()
     errors = []
+    suffix = "" if keep_original_name else "_converted"
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for file_bytes, filename, mime in files:
             base = os.path.splitext(filename)[0] or "file"
             try:
                 out_bytes, ct = convert_one(file_bytes, filename, mime, voice_cfg, output_format)
                 ext = _ext_from_ct_or_fallback(ct, default_ext)
-                zf.writestr(f"{base}_converted{ext}", out_bytes)
+                zf.writestr(f"{base}{suffix}{ext}", out_bytes)
                 if debug:
                     zf.writestr(f"_debug_{base}.txt", f"requested={output_format}\ncontent_type={ct}\nresolved_ext={ext}\n")
             except Exception as e:
@@ -529,7 +530,7 @@ if uploaded:
                     prog.progress(i / total, text=f"Processing {i}/{total}")
 
                 with st.spinner("Building ZIP..."):
-                    zip_bytes = convert_batch(files, voice_cfg, chosen_output_format, chosen_ext, debug=debug_mode)
+                    zip_bytes = convert_batch(files, voice_cfg, chosen_output_format, chosen_ext, keep_original_name, debug=debug_mode)
 
                 stamp = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
                 suffix = "" if keep_original_name else "_converted"
@@ -548,5 +549,3 @@ if uploaded:
 
 st.markdown("---")
 st.caption("NOTE: No uploads are stored; results are returned directly.")
-
-
