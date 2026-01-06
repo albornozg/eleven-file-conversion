@@ -3,6 +3,7 @@ import os
 import json
 import zipfile
 import datetime
+import wave  # Added for wrapping raw PCM in WAV
 from typing import List, Tuple, Dict
 
 import requests
@@ -49,6 +50,23 @@ if not st.session_state.auth_ok:
             else:
                 st.error("Invalid credentials")
     st.stop()
+
+# Fetch subscription tier
+def get_subscription_tier():
+    url = "https://api.elevenlabs.io/v1/user/subscription"
+    headers = {"xi-api-key": ELEVEN_API_KEY}
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            return data.get("tier", "unknown").lower()
+        else:
+            return "unknown"
+    except Exception:
+        return "unknown"
+
+tier = get_subscription_tier()
+supports_pcm = tier in ["pro", "scale", "business", "enterprise"]
 
 
 # =========================
@@ -353,7 +371,32 @@ def convert_one(file_bytes: bytes, filename: str, mime: str, voice_cfg: Dict, ou
     r = requests.post(url, headers=headers, files=files, data=data, timeout=300)
     if r.status_code != 200:
         raise RuntimeError(f"{r.status_code}: {r.text}")
-    return r.content, r.headers.get("content-type", "application/octet-stream")
+
+    out_bytes = r.content
+    returned_ct = r.headers.get("content-type", "application/octet-stream")
+
+    # If PCM was requested and we didn't get MP3 back, assume raw PCM and add WAV header
+    if output_format.startswith("pcm_") and "mpeg" not in returned_ct.lower():
+        try:
+            # Parse sample rate from output_format (e.g., "pcm_44100" -> 44100)
+            sample_rate = int(output_format.split("_")[1])
+        except ValueError:
+            sample_rate = 44100  # Fallback
+        channels = 1  # Mono (standard for Eleven Labs outputs)
+        sampwidth = 2  # 16-bit
+
+        wav_buffer = io.BytesIO()
+        with wave.open(wav_buffer, 'wb') as wav_file:
+            wav_file.setnchannels(channels)
+            wav_file.setsampwidth(sampwidth)
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(out_bytes)
+        out_bytes = wav_buffer.getvalue()
+        ct = "audio/wav"
+    else:
+        ct = returned_ct
+
+    return out_bytes, ct
 
 def convert_batch(files: List[Tuple[bytes, str, str]], voice_cfg: Dict, output_format: str, default_ext: str, keep_original_name: bool, debug: bool=False) -> bytes:
     """
@@ -457,18 +500,27 @@ uploaded = st.file_uploader(
 
 # --- Output format selector ---
 st.subheader("Output format")
-fmt = st.radio(
-    "Choose the format for the converted audio",
-    options=[".mp3 (44.1 kHz / 128 kbps)", ".wav (44.1 kHz PCM)"],
-    horizontal=True,
-    key="out_fmt",
-)
 
 # Map UI label -> ElevenLabs output_format string and preferred file extension
 OUTPUT_FORMAT_MAP = {
     ".mp3 (44.1 kHz / 128 kbps)": ("mp3_44100_128", ".mp3"),
     ".wav (44.1 kHz PCM)": ("pcm_44100", ".wav"),
 }
+
+available_formats = [k for k in OUTPUT_FORMAT_MAP if supports_pcm or ".mp3" in k]
+
+fmt = st.radio(
+    "Choose the format for the converted audio",
+    options=available_formats,
+    horizontal=True,
+    key="out_fmt",
+)
+
+if not supports_pcm and tier != "unknown":
+    st.warning(f"Your ElevenLabs subscription ({tier.capitalize()}) does not support WAV (PCM) output. Defaulting to MP3. Upgrade to Pro or higher to enable WAV.")
+elif tier == "unknown":
+    st.warning("Could not determine your ElevenLabs subscription tier. WAV output may not be available. If issues occur, check your plan and try again.")
+
 chosen_output_format, chosen_ext = OUTPUT_FORMAT_MAP[fmt]
 
 # --- Checkbox: keep original filename or add "_converted" ---
@@ -510,7 +562,7 @@ if uploaded:
                 # Warn if user asked for WAV but API still returned MP3
                 if chosen_ext == ".wav" and "mpeg" in (ct or "").lower():
                     st.warning("You selected WAV (PCM), but the API returned MP3. "
-                               "This can happen if your ElevenLabs plan does not include PCM/WAV output.")
+                               "This can happen if your ElevenLabs plan does not include PCM/WAV output. Please upgrade your subscription.")
 
                 st.success("Done.")
                 st.download_button(
