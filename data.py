@@ -184,7 +184,7 @@ CELINE_VOICES: Dict[str, Dict] = {
     # Thai
     "th_michiel": {
         "display": "Michiel",
-        "id": "D0zfVvTrOu5S1yl4OIwg",
+        "id": "MimQae2Hj8EnqlLMU4wf",
         "settings": {"similarity_boost": 0.0, "stability": 0.5, "style": 0.0, "use_speaker_boost": False},
         "model_id": "eleven_multilingual_sts_v2",
         "lang": "Thai",
